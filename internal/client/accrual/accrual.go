@@ -8,6 +8,10 @@ import (
 	"net/http"
 	"strconv"
 	"time"
+
+	"go.uber.org/zap"
+
+	"github.com/dariamoshkina/gopherMart/internal/infra"
 )
 
 var ErrNotRegistered = errors.New("order not registered in accrual system")
@@ -29,12 +33,17 @@ type AccrualResult struct {
 type Client struct {
 	baseURL    string
 	httpClient *http.Client
+	logger     *zap.Logger
 }
 
-func New(baseURL string) *Client {
+func New(baseURL string, logger *zap.Logger) *Client {
 	return &Client{
-		baseURL:    baseURL,
-		httpClient: &http.Client{Timeout: 5 * time.Second},
+		baseURL: baseURL,
+		logger:  logger,
+		httpClient: &http.Client{
+			Timeout:   30 * time.Second,
+			Transport: infra.NewRetryTransport(http.DefaultTransport, 3, 200*time.Millisecond, 5*time.Second),
+		},
 	}
 }
 
@@ -54,22 +63,26 @@ func (c *Client) GetOrder(ctx context.Context, orderNumber string) (*AccrualResu
 	switch resp.StatusCode {
 	case http.StatusOK:
 		var result AccrualResult
-		if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		if err = json.NewDecoder(resp.Body).Decode(&result); err != nil {
 			return nil, fmt.Errorf("decode accrual response: %w", err)
 		}
 		return &result, nil
 	case http.StatusNoContent:
 		return nil, ErrNotRegistered
 	case http.StatusTooManyRequests:
-		return nil, &RateLimitError{RetryAfter: parseRetryAfter(resp.Header.Get("Retry-After"))}
+		retryAfter, err := parseRetryAfter(resp.Header.Get("Retry-After"))
+		if err != nil {
+			c.logger.Warn("parse Retry-After header", zap.Error(err))
+		}
+		return nil, &RateLimitError{RetryAfter: retryAfter}
 	default:
 		return nil, fmt.Errorf("accrual service returned %d", resp.StatusCode)
 	}
 }
 
-func parseRetryAfter(headerVal string) time.Duration {
+func parseRetryAfter(headerVal string) (time.Duration, error) {
 	if s, err := strconv.Atoi(headerVal); err == nil && s > 0 {
-		return time.Duration(s) * time.Second
+		return time.Duration(s) * time.Second, nil
 	}
-	return 60 * time.Second
+	return 60 * time.Second, fmt.Errorf("invalid Retry-After header %q, defaulting to 60s", headerVal)
 }

@@ -28,8 +28,7 @@ func (r *OrderRepository) Create(ctx context.Context, userID int64, orderNumber 
 	var order model.Order
 	err := row.Scan(&order.ID, &order.UserID, &order.OrderNumber, &order.Status, &order.Accrual, &order.UploadedAt)
 	if err != nil {
-		var pgErr *pgconn.PgError
-		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
+		if pgErr, ok := errors.AsType[*pgconn.PgError](err); ok && pgErr.Code == "23505" {
 			return nil, service.ErrDuplicateOrderNumber
 		}
 		return nil, err

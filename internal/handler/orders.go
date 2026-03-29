@@ -94,8 +94,7 @@ func (h *OrdersHandler) List(w http.ResponseWriter, r *http.Request) {
 		}
 
 		if order.Accrual != nil && *order.Accrual > 0 {
-			accrual := float64(*order.Accrual) / 100
-			item.Accrual = &accrual
+			item.Accrual = new(float64(*order.Accrual) / 100)
 		}
 		resp = append(resp, item)
 	}

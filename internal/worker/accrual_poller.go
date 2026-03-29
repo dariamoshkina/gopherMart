@@ -63,9 +63,8 @@ func (p *Poller) poll(ctx context.Context) {
 		if ctx.Err() != nil {
 			return
 		}
-		if err := p.processOrder(ctx, order); err != nil {
-			var rl *accrual.RateLimitError
-			if errors.As(err, &rl) {
+		if err = p.processOrder(ctx, order); err != nil {
+			if rl, ok := errors.AsType[*accrual.RateLimitError](err); ok {
 				p.logger.Info("rate limited, backing off",
 					zap.Duration("retry_after", rl.RetryAfter))
 				select {
@@ -100,10 +99,9 @@ func (p *Poller) processOrder(ctx context.Context, order *model.Order) error {
 	case "PROCESSED":
 		var accrualKopecks *int64
 		if result.Accrual != nil {
-			v := int64(math.Round(*result.Accrual * 100))
-			accrualKopecks = &v
+			accrualKopecks = new(int64(math.Round(*result.Accrual * 100)))
 		}
-		if err := p.orders.MarkProcessedWithCredit(ctx, order.ID, order.UserID, accrualKopecks); err != nil {
+		if err = p.orders.MarkProcessedWithCredit(ctx, order.ID, order.UserID, accrualKopecks); err != nil {
 			return err
 		}
 		p.logger.Info("order processed",

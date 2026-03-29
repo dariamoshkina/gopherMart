@@ -50,7 +50,7 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
-	if err := h.setAuthToken(w, user.ID); err != nil {
+	if err = h.setAuthToken(w, user.ID); err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
@@ -76,7 +76,7 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
-	if err := h.setAuthToken(w, user.ID); err != nil {
+	if err = h.setAuthToken(w, user.ID); err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}

@@ -10,6 +10,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"go.uber.org/zap"
 )
 
 func TestGetOrder_200(t *testing.T) {
@@ -25,7 +27,7 @@ func TestGetOrder_200(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	c := New(srv.URL)
+	c := New(srv.URL, zap.NewNop())
 	result, err := c.GetOrder(context.Background(), "12345678903")
 	require.NoError(t, err)
 	assert.Equal(t, "PROCESSED", result.Status)
@@ -40,7 +42,7 @@ func TestGetOrder_200_NoAccrual(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	c := New(srv.URL)
+	c := New(srv.URL, zap.NewNop())
 	result, err := c.GetOrder(context.Background(), "12345678903")
 	require.NoError(t, err)
 	assert.Equal(t, "PROCESSING", result.Status)
@@ -53,7 +55,7 @@ func TestGetOrder_204(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	c := New(srv.URL)
+	c := New(srv.URL, zap.NewNop())
 	_, err := c.GetOrder(context.Background(), "12345678903")
 	assert.ErrorIs(t, err, ErrNotRegistered)
 }
@@ -65,7 +67,7 @@ func TestGetOrder_429_WithRetryAfter(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	c := New(srv.URL)
+	c := New(srv.URL, zap.NewNop())
 	_, err := c.GetOrder(context.Background(), "12345678903")
 	require.Error(t, err)
 
@@ -80,7 +82,7 @@ func TestGetOrder_429_MissingRetryAfter(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	c := New(srv.URL)
+	c := New(srv.URL, zap.NewNop())
 	_, err := c.GetOrder(context.Background(), "12345678903")
 	var rl *RateLimitError
 	require.True(t, errors.As(err, &rl))
@@ -93,7 +95,7 @@ func TestGetOrder_500(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	c := New(srv.URL)
+	c := New(srv.URL, zap.NewNop())
 	_, err := c.GetOrder(context.Background(), "12345678903")
 	require.Error(t, err)
 	assert.False(t, errors.Is(err, ErrNotRegistered))

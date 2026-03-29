@@ -10,14 +10,12 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/golang-migrate/migrate/v4"
-	_ "github.com/golang-migrate/migrate/v4/database/postgres"
-	_ "github.com/golang-migrate/migrate/v4/source/file"
 	"go.uber.org/zap"
 
 	"github.com/dariamoshkina/gopherMart/internal/client/accrual"
 	"github.com/dariamoshkina/gopherMart/internal/config"
 	"github.com/dariamoshkina/gopherMart/internal/handler"
+	"github.com/dariamoshkina/gopherMart/internal/infra"
 	"github.com/dariamoshkina/gopherMart/internal/repository/postgres"
 	"github.com/dariamoshkina/gopherMart/internal/server"
 	"github.com/dariamoshkina/gopherMart/internal/service"
@@ -36,15 +34,10 @@ func main() {
 		logger.Fatal("load config", zap.Error(err))
 	}
 
-	if err := runMigrations(cfg.DatabaseURI); err != nil {
-		logger.Fatal("migrations", zap.Error(err))
-	}
-	logger.Info("migrations applied")
-
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	pool, err := postgres.NewPool(ctx, cfg.DatabaseURI)
+	pool, err := infra.NewPgPool(ctx, cfg.DatabaseURI, logger)
 	if err != nil {
 		logger.Fatal("database", zap.Error(err))
 	}
@@ -65,7 +58,7 @@ func main() {
 	router := server.NewRouter(authHandler, ordersHandler, balanceHandler, cfg.AuthSecret)
 	srv := server.New(router, cfg.ServerAddress)
 
-	accrualClient := accrual.New(cfg.AccrualSystemAddress)
+	accrualClient := accrual.New(cfg.AccrualSystemAddress, logger)
 	poller := worker.New(orderRepo, accrualClient, 2*time.Second, logger)
 
 	var wg sync.WaitGroup
@@ -77,7 +70,7 @@ func main() {
 
 	logger.Info("starting server", zap.String("addr", cfg.ServerAddress))
 	go func() {
-		if err := srv.Run(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+		if err = srv.Run(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			logger.Error("server error", zap.Error(err))
 		}
 	}()
@@ -87,22 +80,10 @@ func main() {
 
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	if err := srv.Shutdown(shutdownCtx); err != nil {
+	if err = srv.Shutdown(shutdownCtx); err != nil {
 		logger.Error("server shutdown", zap.Error(err))
 	}
 
 	wg.Wait()
 	logger.Info("goodbye")
-}
-
-func runMigrations(databaseURL string) error {
-	m, err := migrate.New("file://migrations", databaseURL)
-	if err != nil {
-		return err
-	}
-	defer m.Close()
-	if err := m.Up(); err != nil && !errors.Is(err, migrate.ErrNoChange) {
-		return err
-	}
-	return nil
 }

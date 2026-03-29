@@ -4,11 +4,11 @@ import (
 	"context"
 	"errors"
 
+	"github.com/dariamoshkina/gopherMart/internal/model"
+	"github.com/dariamoshkina/gopherMart/internal/service"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/dariamoshkina/gopherMart/internal/model"
-	"github.com/dariamoshkina/gopherMart/internal/service"
 )
 
 type UserRepository struct {
@@ -28,8 +28,7 @@ func (r *UserRepository) Create(ctx context.Context, login, passwordHash string)
 	var user model.User
 	err := row.Scan(&user.ID, &user.Login, &user.PasswordHash, &user.CreatedAt)
 	if err != nil {
-		var pgErr *pgconn.PgError
-		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
+		if pgErr, ok := errors.AsType[*pgconn.PgError](err); ok && pgErr.Code == "23505" {
 			return nil, service.ErrLoginTaken
 		}
 		return nil, err
