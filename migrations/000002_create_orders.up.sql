@@ -1,9 +1,9 @@
 CREATE TABLE IF NOT EXISTS orders (
-    id           BIGSERIAL PRIMARY KEY,
+    id           BIGINT       PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
     user_id      BIGINT       NOT NULL REFERENCES users (id) ON DELETE CASCADE,
     order_number VARCHAR(50)  NOT NULL,
     status       VARCHAR(20)  NOT NULL DEFAULT 'NEW',
-    accrual      BIGINT         NOT NULL DEFAULT 0,
+    accrual      BIGINT       NOT NULL DEFAULT 0,
     uploaded_at  TIMESTAMPTZ  NOT NULL DEFAULT now(),
     CONSTRAINT chk_orders_status CHECK (status IN ('NEW', 'PROCESSING', 'PROCESSED', 'INVALID')),
     CONSTRAINT chk_orders_accrual CHECK (accrual >= 0)

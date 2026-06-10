@@ -5,11 +5,11 @@ CREATE TABLE IF NOT EXISTS balance (
 );
 
 CREATE TABLE IF NOT EXISTS withdrawals (
-    id           BIGSERIAL PRIMARY KEY,
+    id           BIGINT            PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
     user_id      BIGINT            NOT NULL REFERENCES users (id) ON DELETE CASCADE,
     order_number VARCHAR(50)       NOT NULL,
-    sum          BIGINT           NOT NULL CHECK (sum > 0),
-    processed_at TIMESTAMPTZ  NOT NULL DEFAULT now()
+    sum          BIGINT            NOT NULL CHECK (sum > 0),
+    processed_at TIMESTAMPTZ       NOT NULL DEFAULT now()
 );
 
 CREATE INDEX idx_withdrawals_user_id ON withdrawals (user_id);

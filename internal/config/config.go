@@ -13,20 +13,21 @@ type Config struct {
 	AuthSecret           string `env:"AUTH_SECRET" envDefault:"dev-secret-change-in-production"`
 }
 
-// flags are parsed first, env vars override them
+// flags have higher priority than environment variables
 func Load() (*Config, error) {
 	cfg := &Config{
 		ServerAddress:        "localhost:8080",
 		AccrualSystemAddress: "http://localhost:8081",
 	}
 
-	flag.StringVar(&cfg.ServerAddress, "a", cfg.ServerAddress, "listen address (overridden by RUN_ADDRESS)")
-	flag.StringVar(&cfg.DatabaseURI, "d", cfg.DatabaseURI, "database URI (overridden by DATABASE_URI)")
-	flag.StringVar(&cfg.AccrualSystemAddress, "r", cfg.AccrualSystemAddress, "accrual system address (overridden by ACCRUAL_SYSTEM_ADDRESS)")
-	flag.Parse()
-
 	if err := env.Parse(cfg); err != nil {
 		return nil, err
 	}
+
+	flag.StringVar(&cfg.ServerAddress, "a", cfg.ServerAddress, "listen address (overrides RUN_ADDRESS)")
+	flag.StringVar(&cfg.DatabaseURI, "d", cfg.DatabaseURI, "database URI (overrides DATABASE_URI)")
+	flag.StringVar(&cfg.AccrualSystemAddress, "r", cfg.AccrualSystemAddress, "accrual system address (overrides ACCRUAL_SYSTEM_ADDRESS)")
+	flag.Parse()
+
 	return cfg, nil
 }
