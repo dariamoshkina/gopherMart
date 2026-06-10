@@ -59,7 +59,7 @@ func main() {
 	srv := server.New(router, cfg.ServerAddress)
 
 	accrualClient := accrual.New(cfg.AccrualSystemAddress, logger)
-	poller := worker.New(orderRepo, accrualClient, 2*time.Second, logger)
+	poller := worker.New(orderRepo, accrualClient, 2*time.Second, 5, logger)
 
 	var wg sync.WaitGroup
 	wg.Add(1)

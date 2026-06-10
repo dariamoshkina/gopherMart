@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"math"
+	"sync"
 	"time"
 
 	"go.uber.org/zap"
@@ -23,36 +24,93 @@ type AccrualClient interface {
 }
 
 type Poller struct {
-	orders   OrderRepo
-	client   AccrualClient
-	interval time.Duration
-	logger   *zap.Logger
+	orders      OrderRepo
+	client      AccrualClient
+	interval    time.Duration
+	workerCount int
+	logger      *zap.Logger
+
+	mu          sync.Mutex
+	pausedUntil time.Time
 }
 
-func New(orders OrderRepo, client AccrualClient, interval time.Duration, logger *zap.Logger) *Poller {
+func New(orders OrderRepo, client AccrualClient, interval time.Duration, workerCount int, logger *zap.Logger) *Poller {
 	return &Poller{
-		orders:   orders,
-		client:   client,
-		interval: interval,
-		logger:   logger,
+		orders:      orders,
+		client:      client,
+		interval:    interval,
+		workerCount: workerCount,
+		logger:      logger,
+	}
+}
+
+func (p *Poller) pauseFor(d time.Duration) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if until := time.Now().Add(d); until.After(p.pausedUntil) {
+		p.pausedUntil = until
+	}
+}
+
+func (p *Poller) waitIfPaused(ctx context.Context) {
+	p.mu.Lock()
+	until := p.pausedUntil
+	p.mu.Unlock()
+
+	d := time.Until(until)
+	if d <= 0 {
+		return
+	}
+	select {
+	case <-time.After(d):
+	case <-ctx.Done():
 	}
 }
 
 func (p *Poller) Run(ctx context.Context) {
+	jobs := make(chan *model.Order, p.workerCount)
+
+	var wg sync.WaitGroup
+	for range p.workerCount {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for order := range jobs {
+				if ctx.Err() != nil {
+					return
+				}
+				p.waitIfPaused(ctx)
+				if err := p.processOrder(ctx, order); err != nil {
+					if rl, ok := errors.AsType[*accrual.RateLimitError](err); ok {
+						p.logger.Info("rate limited, backing off",
+							zap.Duration("retry_after", rl.RetryAfter))
+						p.pauseFor(rl.RetryAfter)
+						continue
+					}
+					p.logger.Warn("process order",
+						zap.String("order", order.OrderNumber),
+						zap.Error(err))
+				}
+			}
+		}()
+	}
+
 	ticker := time.NewTicker(p.interval)
 	defer ticker.Stop()
 
 	for {
 		select {
 		case <-ctx.Done():
+			close(jobs)
+			wg.Wait()
 			return
 		case <-ticker.C:
-			p.poll(ctx)
+			p.poll(ctx, jobs)
 		}
 	}
 }
 
-func (p *Poller) poll(ctx context.Context) {
+func (p *Poller) poll(ctx context.Context, jobs chan<- *model.Order) {
 	pending, err := p.orders.GetPending(ctx, 100)
 	if err != nil {
 		p.logger.Error("fetch pending orders", zap.Error(err))
@@ -60,22 +118,10 @@ func (p *Poller) poll(ctx context.Context) {
 	}
 
 	for _, order := range pending {
-		if ctx.Err() != nil {
+		select {
+		case jobs <- order:
+		case <-ctx.Done():
 			return
-		}
-		if err = p.processOrder(ctx, order); err != nil {
-			if rl, ok := errors.AsType[*accrual.RateLimitError](err); ok {
-				p.logger.Info("rate limited, backing off",
-					zap.Duration("retry_after", rl.RetryAfter))
-				select {
-				case <-time.After(rl.RetryAfter):
-				case <-ctx.Done():
-				}
-				return
-			}
-			p.logger.Warn("process order",
-				zap.String("order", order.OrderNumber),
-				zap.Error(err))
 		}
 	}
 }
