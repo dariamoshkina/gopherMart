@@ -1,0 +1,27 @@
+resolve-type-alias: false
+disable-version-string: true
+issue-845-fix: true
+packages:
+  github.com/dariamoshkina/gopherMart/internal/service:
+    config:
+      dir: "internal/service/mocks"
+      outpkg: "mocks"
+    interfaces:
+      UserRepository:
+      OrderRepository:
+      BalanceRepository:
+  github.com/dariamoshkina/gopherMart/internal/handler:
+    config:
+      dir: "internal/handler/mocks"
+      outpkg: "mocks"
+    interfaces:
+      AuthService:
+      OrdersService:
+      BalanceService:
+  github.com/dariamoshkina/gopherMart/internal/worker:
+    config:
+      dir: "internal/worker/mocks"
+      outpkg: "mocks"
+    interfaces:
+      OrderRepo:
+      AccrualClient:
